@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dangerous Writing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet"
+  />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main>
+    <header class="masthead">
+      <div class="kicker">A writing experiment</div>
+      <h1>Dangerous&nbsp;writing</h1>
+      <p class="lede">
+        Set a goal and a tolerance for silence, then write without stopping. Pause
+        for too long and the words begin to erase themselves, one character at a
+        time, until you start typing again — or until there is nothing left.
+      </p>
+    </header>
+
+    <div class="authbar" aria-live="polite">
+      <span id="authStatus" class="auth-status">Checking sign-in…</span>
+      <button id="authBtn" type="button" class="auth-btn" hidden></button>
+    </div>
+
+    <section class="controls" aria-label="Settings">
+      <div class="control">
+        <div class="control-head">
+          <label for="minutes">Write for</label>
+          <output id="minutesOut" class="readout">5<span class="unit">min</span></output>
+        </div>
+        <input id="minutes" type="range" min="0.5" max="30" step="0.5" value="5" />
+        <div class="hint">How long you want to keep writing.</div>
+      </div>
+
+      <div class="control">
+        <div class="control-head">
+          <label for="seconds">Grace period</label>
+          <output id="secondsOut" class="readout">5<span class="unit">sec</span></output>
+        </div>
+        <input id="seconds" type="range" min="1" max="20" step="1" value="5" />
+        <div class="hint">Seconds of silence allowed before the decay begins.</div>
+      </div>
+
+      <label class="toggle" for="aiMode">
+        <input id="aiMode" type="checkbox" />
+        <span class="toggle-track"><span class="toggle-knob"></span></span>
+        <span class="toggle-text">
+          <span class="toggle-title">AI takeover</span>
+          <span class="toggle-sub">When you stop, the machine writes for you instead of erasing.</span>
+        </span>
+      </label>
+
+      <div class="actions">
+        <button id="startBtn" type="button" class="start">Begin</button>
+        <button id="demoBtn" type="button" class="demo">Start demo</button>
+        <button id="restoreBtn" type="button" class="restore" hidden>Restore last writing</button>
+      </div>
+    </section>
+
+    <section class="stage" aria-label="Writing area">
+      <div class="stage-meta">
+        <span id="phase" class="phase">Ready when you are</span>
+        <span id="timer" class="timer" aria-live="off">00:00</span>
+      </div>
+      <div class="progress"><div id="progressInner" class="progress-bar"></div></div>
+      <div class="editor-wrap">
+        <textarea
+          id="editor"
+          placeholder="Press Begin, then start typing here…"
+          disabled
+          spellcheck="true"
+          autocomplete="off"
+        ></textarea>
+        <div id="countdown" class="countdown" hidden><span id="countNum"></span></div>
+      </div>
+      <div class="stage-foot">
+        <span id="words" class="counter">0 words</span>
+        <button id="copyBtn" type="button" class="copy" hidden>Copy text</button>
+        <span id="status" class="status"></span>
+      </div>
+    </section>
+
+    <footer class="colophon">
+      The timer runs in your browser. When a run ends, your writing is saved to this
+      browser — and backed up to your Val Town account if you're signed in. With
+      <strong>AI takeover</strong> on, the tail of your text is sent to a language model
+      so it can continue where you left off — turn the toggle off to keep everything
+      fully local.
+      Idea via <a href="https://dynomight.net/links-2/" target="_blank" rel="noopener">dynomight</a> (see #9).
+      <a class="source-link" href="https://www.val.town/x/cricks_unmixed4u/dangerous-writing-app/code/" target="_blank" rel="noopener">See source</a>
+    </footer>
+  </main>
+
+  <script src="/client.js"></script>
+</body>
+</html>
