@@ -95,13 +95,13 @@ async function handler(req: Request): Promise<Response> {
     const user = await getOAuthUserData(req);
     if (!user?.user?.id) return Response.json({ saved: false, sessions: [] });
     const res = await sqlite.execute({
-      sql: "SELECT text, saved_at FROM writing_sessions WHERE user_id = ? ORDER BY saved_at DESC LIMIT 5",
+      sql: "SELECT id, text, saved_at FROM writing_sessions WHERE user_id = ? ORDER BY saved_at DESC LIMIT 5",
       args: [user.user.id],
     });
-    const rows = res.rows as Array<{ text: string; saved_at: number }>;
+    const rows = res.rows as Array<{ id: number; text: string; saved_at: number }>;
     return Response.json({
       saved: true,
-      sessions: rows.map((r) => ({ text: r.text, savedAt: r.saved_at })),
+      sessions: rows.map((r) => ({ id: r.id, text: r.text, savedAt: r.saved_at })),
     });
   }
 

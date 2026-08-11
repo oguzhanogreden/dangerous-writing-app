@@ -61,6 +61,19 @@
         <button id="startBtn" type="button" class="start">Begin</button>
         <button id="demoBtn" type="button" class="demo">Start demo</button>
         <button id="restoreBtn" type="button" class="restore" hidden>Restore last writing</button>
+        <button
+          id="entriesBtn"
+          type="button"
+          class="restore entries-toggle"
+          hidden
+          aria-expanded="false"
+          aria-controls="entriesPanel"
+        >
+          Previous entries
+        </button>
+      </div>
+      <div id="entriesPanel" class="entries-panel" hidden>
+        <ul id="entriesList" class="entries-list" aria-label="Previous writing sessions"></ul>
       </div>
     </section>
 

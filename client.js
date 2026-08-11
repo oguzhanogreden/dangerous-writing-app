@@ -16,6 +16,9 @@ const aiMode = document.getElementById("aiMode");
 const demoBtn = document.getElementById("demoBtn");
 const copyBtn = document.getElementById("copyBtn");
 const restoreBtn = document.getElementById("restoreBtn");
+const entriesBtn = document.getElementById("entriesBtn");
+const entriesPanel = document.getElementById("entriesPanel");
+const entriesList = document.getElementById("entriesList");
 const authStatus = document.getElementById("authStatus");
 const authBtn = document.getElementById("authBtn");
 
@@ -148,6 +151,20 @@ function setStatus(text, cls = "") {
   statusEl.className = "status" + (cls ? " " + cls : "");
 }
 
+const entryTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+function formatSessionTime(ms) {
+  return ms ? entryTimeFormatter.format(new Date(ms)) : "";
+}
+function snippet(text, max = 90) {
+  const t = (text || "").trim().replace(/\s+/g, " ");
+  return t.length > max ? t.slice(0, max).trimEnd() + "…" : t;
+}
+
 function cancelCountdown() {
   if (countTimer !== null) {
     clearTimeout(countTimer);
@@ -178,7 +195,6 @@ function resetAiState() {
 // Finished writing goes to localStorage first; if the visitor is signed in to
 // val.town it is also backed up to this val's sqlite via /api/save.
 const SAVE_KEY = "dangerous-writing:last";
-let serverDraft = null; // most recent session pulled from val.town, if signed in
 
 function lockEditor() {
   // Read-only (not disabled) so the text stays selectable and copyable.
@@ -220,6 +236,7 @@ function saveAndAnnounce(text, base, cls = "") {
     .then((data) => {
       if (data && data.saved) {
         setStatus(base + " · Backed up to your Val Town account.", cls);
+        loadPreviousEntries(); // refresh the panel so this session shows up immediately
       }
     })
     .catch(() => {
@@ -271,7 +288,7 @@ async function refreshAuth() {
     username = null;
   }
   renderAuth();
-  if (signedIn) maybeShowRestore(); // server restore becomes available
+  maybeShowRestore(); // re-sync restore/entries UI on every auth transition
 }
 
 function renderAuth() {
@@ -318,24 +335,85 @@ authBtn.addEventListener("click", () => {
   else signIn();
 });
 
-// Offer to restore the most recent session: local draft wins, else the latest
-// one synced to val.town (only available when signed in).
-async function maybeShowRestore() {
-  const local = readLocalDraft();
-  if (local && local.text.trim()) {
-    restoreBtn.hidden = false;
-    return;
-  }
+// Signed-in users browse their synced history via the "Previous entries"
+// panel; anonymous visitors keep the single-draft localStorage restore.
+function expandEntries() {
+  entriesPanel.hidden = false;
+  entriesBtn.setAttribute("aria-expanded", "true");
+}
+function collapseEntries() {
+  entriesPanel.hidden = true;
+  entriesBtn.setAttribute("aria-expanded", "false");
+}
+entriesBtn.addEventListener("click", () => {
+  if (entriesBtn.getAttribute("aria-expanded") === "true") collapseEntries();
+  else expandEntries();
+});
+
+let previousEntries = [];
+
+async function loadPreviousEntries() {
   try {
     const res = await fetch("/api/sessions");
     const data = await res.json();
-    if (data && data.saved && data.sessions && data.sessions[0]?.text) {
-      serverDraft = data.sessions[0].text;
-      restoreBtn.hidden = false;
+    if (data && data.saved && data.sessions && data.sessions.length) {
+      previousEntries = data.sessions;
+      renderEntries(previousEntries);
+      entriesBtn.hidden = false;
+    } else {
+      entriesBtn.hidden = true;
+      collapseEntries();
     }
   } catch {
-    // signed out or unreachable — no server restore available
+    entriesBtn.hidden = true;
+    collapseEntries();
   }
+}
+
+function renderEntries(sessions) {
+  entriesList.innerHTML = "";
+  for (const s of sessions) {
+    const li = document.createElement("li");
+    li.className = "entries-item";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "entries-item-btn";
+    btn.dataset.id = String(s.id);
+
+    const time = document.createElement("span");
+    time.className = "entries-item-time";
+    time.textContent = `${formatSessionTime(s.savedAt)} · ${countWords(s.text)} words`;
+
+    const preview = document.createElement("span");
+    preview.className = "entries-item-preview";
+    preview.textContent = snippet(s.text);
+
+    btn.append(time, preview);
+    li.appendChild(btn);
+    entriesList.appendChild(li);
+  }
+}
+
+entriesList.addEventListener("click", (e) => {
+  const btn = e.target.closest(".entries-item-btn");
+  if (!btn) return;
+  const entry = previousEntries.find((s) => s.id === Number(btn.dataset.id));
+  if (!entry) return;
+  restoreTextToEditor(entry.text);
+  collapseEntries();
+});
+
+async function maybeShowRestore() {
+  if (signedIn) {
+    restoreBtn.hidden = true;
+    await loadPreviousEntries();
+    return;
+  }
+  entriesBtn.hidden = true;
+  collapseEntries();
+  const local = readLocalDraft();
+  if (local && local.text.trim()) restoreBtn.hidden = false;
 }
 
 refreshAuth();
@@ -364,6 +442,7 @@ function start(opts = {}) {
   editor.style.setProperty("--fade", "0");
   editor.disabled = true;
   copyBtn.hidden = true;
+  collapseEntries();
   updateCounter();
 
   // Begin doubles as a Stop control once a run/countdown is active.
@@ -696,11 +775,11 @@ demoBtn.addEventListener("click", () => {
 });
 
 // ---- restore / copy interactions ----
-restoreBtn.addEventListener("click", () => {
-  const local = readLocalDraft();
-  const text = (local && local.text.trim()) ? local.text : serverDraft;
+// Loads a past draft into the editor so you can re-read (or copy) it. Guarded
+// against an active run/countdown so a stray click can't clobber it.
+function restoreTextToEditor(text) {
+  if (running || counting) return;
   if (!text) return;
-  // Load the draft into the editor so you can re-read (or copy) it.
   editor.value = text;
   editor.disabled = false;
   lockEditor();
@@ -710,6 +789,11 @@ restoreBtn.addEventListener("click", () => {
   autosize();
   updateCounter();
   scrollTo(0, document.body.scrollHeight);
+}
+
+restoreBtn.addEventListener("click", () => {
+  const local = readLocalDraft();
+  if (local && local.text.trim()) restoreTextToEditor(local.text);
 });
 
 copyBtn.addEventListener("click", copyText);

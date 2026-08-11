@@ -43,7 +43,7 @@ body {
 main {
   max-width: 46rem;
   margin: 0 auto;
-  padding: clamp(2.5rem, 6vw, 5rem) 1.5rem 4rem;
+  padding: clamp(2.5rem, 6vw, 5rem) 1.5rem 7rem;
 }
 
 /* ---- masthead ---- */
@@ -414,6 +414,69 @@ body.aiwriting #editor {
 }
 .restore:hover { background: var(--good); color: var(--paper); }
 
+.entries-toggle {
+  position: relative;
+  padding-right: 2.2rem;
+}
+.entries-toggle::after {
+  content: "";
+  position: absolute;
+  right: 1.3rem;
+  top: 50%;
+  width: 0.5em;
+  height: 0.5em;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: translateY(-65%) rotate(45deg);
+  transition: transform 0.15s;
+}
+.entries-toggle[aria-expanded="true"]::after { transform: translateY(-35%) rotate(-135deg); }
+
+.entries-panel {
+  margin-top: 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.entries-panel[hidden] { display: none; }
+
+.entries-list { list-style: none; margin: 0; padding: 0; }
+.entries-item + .entries-item { border-top: 1px solid var(--rule); }
+.entries-item-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  width: 100%;
+  padding: 0.85rem 1.1rem;
+  background: transparent;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+  transition: background 0.15s;
+}
+.entries-item-btn:hover,
+.entries-item-btn:focus-visible {
+  background: color-mix(in srgb, var(--good) 10%, transparent);
+  outline: none;
+}
+.entries-item-time {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.entries-item-preview {
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- sign in bar ---- */
 .authbar {
   display: flex;
@@ -461,4 +524,5 @@ body.aiwriting #editor {
     align-items: start;
   }
   .start { grid-column: 1 / -1; }
+  #entriesPanel { grid-column: 1 / -1; }
 }
