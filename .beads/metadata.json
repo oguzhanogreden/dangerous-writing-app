@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "dangerous_writing_app",
+  "project_id": "9da9b012-2fd3-4d51-b87b-14134177ec16"
+}

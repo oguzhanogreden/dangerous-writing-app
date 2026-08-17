@@ -60,6 +60,7 @@
       <div class="actions">
         <button id="startBtn" type="button" class="start">Begin</button>
         <button id="demoBtn" type="button" class="demo">Start demo</button>
+        <button id="continueBtn" type="button" class="restore continue" hidden>Keep going</button>
         <button id="restoreBtn" type="button" class="restore" hidden>Restore last writing</button>
         <button
           id="entriesBtn"
@@ -110,6 +111,13 @@
       <a class="source-link" href="https://www.val.town/x/cricks_unmixed4u/dangerous-writing-app/code/" target="_blank" rel="noopener">See source</a>
     </footer>
   </main>
+
+  <!-- Pinned to the viewport, not the page, so the silence budget stays in
+       sight however far the writing has pushed the caret down. -->
+  <div id="graceBar" class="gracebar" aria-hidden="true">
+    <span id="graceLabel" class="gracebar-label"></span>
+    <div class="gracebar-track"><div id="graceFill" class="gracebar-fill"></div></div>
+  </div>
 
   <script src="/client.js"></script>
 </body>

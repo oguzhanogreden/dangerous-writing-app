@@ -15,10 +15,14 @@ const countNum = document.getElementById("countNum");
 const aiMode = document.getElementById("aiMode");
 const demoBtn = document.getElementById("demoBtn");
 const copyBtn = document.getElementById("copyBtn");
+const continueBtn = document.getElementById("continueBtn");
 const restoreBtn = document.getElementById("restoreBtn");
 const entriesBtn = document.getElementById("entriesBtn");
 const entriesPanel = document.getElementById("entriesPanel");
 const entriesList = document.getElementById("entriesList");
+const graceBar = document.getElementById("graceBar");
+const graceFill = document.getElementById("graceFill");
+const graceLabel = document.getElementById("graceLabel");
 const authStatus = document.getElementById("authStatus");
 const authBtn = document.getElementById("authBtn");
 
@@ -54,6 +58,9 @@ let humanChars = 0; // characters the human authored this run (best-effort)
 
 const DECAY_CHARS_PER_SEC = 12;
 const AI_TYPE_MS = 24; // ms per character when the AI types
+// The grace meter stays hidden until this share of the silence budget is spent,
+// so it doesn't flicker at full while the writer is mid-sentence.
+const GRACE_REVEAL = 0.25;
 
 // ---- live readouts for the sliders ----
 function fmtMinutes(v) {
@@ -163,6 +170,27 @@ function formatSessionTime(ms) {
 function snippet(text, max = 90) {
   const t = (text || "").trim().replace(/\s+/g, " ");
   return t.length > max ? t.slice(0, max).trimEnd() + "…" : t;
+}
+
+// Drive the fixed grace meter: how much silence is left before decay or the AI
+// takeover. Pass null to retire it (no run in progress).
+function setGrace(remainingMs) {
+  if (remainingMs === null || !inactivityMs) {
+    graceBar.classList.remove("visible");
+    return;
+  }
+  const left = Math.max(0, remainingMs);
+  const frac = Math.min(1, left / inactivityMs);
+  graceFill.style.width = (frac * 100).toFixed(1) + "%";
+  graceLabel.textContent = (left / 1000).toFixed(1) + "s of silence left";
+  graceBar.classList.toggle("visible", frac <= 1 - GRACE_REVEAL);
+}
+
+// "Keep going" is only worth offering when there is writing to carry forward —
+// not on an empty page, and not on untouched seed text (cancelled countdown).
+function syncContinueBtn() {
+  const text = editor.value;
+  continueBtn.hidden = !text.trim() || text === SEED_TEXT;
 }
 
 function cancelCountdown() {
@@ -422,6 +450,8 @@ refreshAuth();
 // Pressing Begin seeds the lorem ipsum, then runs an instructive countdown.
 // The clock only starts once the countdown reaches "Write!".
 // `opts.demo` runs the aggressive preset with a snap countdown.
+// `opts.continueText` carries text from a finished run into the new one, so a
+// writer can pick up where they left off instead of starting from the seed.
 function start(opts = {}) {
   if (counting || running) return;
   const demo = !!opts.demo;
@@ -434,14 +464,18 @@ function start(opts = {}) {
     goalMs = parseFloat(minutes.value) * 60 * 1000;
     inactivityMs = parseFloat(seconds.value) * 1000;
   }
+  // A continuation is scored as a fresh run: the % AI readout starts over even
+  // though the carried text may already contain the machine's words.
   resetAiState();
 
-  // Seed the editor with text to lose, but keep it locked during the countdown.
-  editor.value = SEED_TEXT;
+  // Seed the editor with text to lose — either the carried-over writing or the
+  // lorem ipsum — but keep it locked during the countdown.
+  editor.value = opts.continueText || SEED_TEXT;
   autosize();
   editor.style.setProperty("--fade", "0");
   editor.disabled = true;
   copyBtn.hidden = true;
+  continueBtn.hidden = true;
   collapseEntries();
   updateCounter();
 
@@ -455,6 +489,10 @@ function start(opts = {}) {
   setBody("warning", false);
   setBody("decaying", false);
   setBody("aiwriting", false);
+  // Hide the surrounding chrome before the countdown runs, so the writer is
+  // already looking at just the stage by the time "Write!" appears.
+  setBody("focus-mode", true);
+  setGrace(null); // no silence budget until the clock actually starts
   progress.style.width = "0%";
   progress.style.background = "var(--ink)";
   setStatus(
@@ -476,6 +514,8 @@ function stop() {
   cancelAnimationFrame(rafId);
   setBody("warning", false);
   setBody("decaying", false);
+  setBody("focus-mode", false);
+  setGrace(null);
   editor.style.setProperty("--fade", "0");
   lockEditor();
 
@@ -492,6 +532,7 @@ function stop() {
   }
 
   startBtn.textContent = "Begin again";
+  syncContinueBtn();
   demoBtn.disabled = false;
   minutes.disabled = false;
   seconds.disabled = false;
@@ -527,14 +568,14 @@ function runCountdown(demo = false) {
       countTimer = setTimeout(() => {
         countdownEl.hidden = true;
         counting = false;
-        beginRun();
+        beginRun(demo);
       }, holdMs);
     }
   }
   tick();
 }
 
-function beginRun() {
+function beginRun(demo = false) {
   running = true;
   startTime = performance.now();
   lastTyped = startTime;
@@ -543,12 +584,24 @@ function beginRun() {
 
   editor.disabled = false;
   unlockEditor();
-  // Put the caret at the end of the seed text and focus.
+  // Put the caret at the end of the text and focus. Carried-over writing can
+  // overflow the box, so scroll the tail into view too.
   editor.focus();
   editor.setSelectionRange(editor.value.length, editor.value.length);
+  editor.scrollTop = editor.scrollHeight;
 
   setPhase("Writing");
-  setStatus("");
+  // Say the silence budget out loud once, the way the demo does. It clears on
+  // the first keystroke so it doesn't linger over the writing.
+  if (demo) {
+    setStatus("");
+  } else {
+    const secs = Math.round(inactivityMs / 1000);
+    setStatus(
+      `${secs} ${secs === 1 ? "second" : "seconds"} of silence allowed — then ` +
+        (aiMode.checked ? "the machine takes over." : "your words start to go."),
+    );
+  }
 
   cancelAnimationFrame(rafId);
   rafId = requestAnimationFrame(loop);
@@ -560,6 +613,8 @@ function finish(won) {
   stopAi();
   setBody("warning", false);
   setBody("decaying", false);
+  setBody("focus-mode", false);
+  setGrace(null);
   editor.style.setProperty("--fade", "0");
   lockEditor();
 
@@ -599,6 +654,7 @@ function finish(won) {
 
   startBtn.disabled = false;
   startBtn.textContent = "Begin again";
+  syncContinueBtn(); // offer to carry the surviving text into a fresh run
   minutes.disabled = false;
   seconds.disabled = false;
   aiMode.disabled = false;
@@ -680,6 +736,7 @@ function loop(now) {
   }
 
   if (idle >= inactivityMs) {
+    setGrace(0); // budget spent — the meter sits empty rather than disappearing
     if (aiMode.checked) {
       // AI TAKEOVER: the machine writes instead of erasing.
       setBody("warning", false);
@@ -714,6 +771,7 @@ function loop(now) {
       }
     }
   } else {
+    setGrace(inactivityMs - idle);
     decayAcc = 0;
     setBody("decaying", false);
     setBody("aiwriting", false);
@@ -753,6 +811,9 @@ editor.addEventListener("input", (e) => {
   if (!aiActive || aiTypeTimer === null) {
     lastTyped = performance.now();
     if (e.inputType) humanChars++;
+    // Retire the opening "N seconds of silence allowed" line — the meter takes
+    // over from here. Warnings (.danger) are the loop's to clear, not ours.
+    if (statusEl.textContent && !statusEl.classList.contains("danger")) setStatus("");
   }
   if (aiActive) {
     // The writer interrupted the machine — hand the pen back immediately.
@@ -786,10 +847,20 @@ function restoreTextToEditor(text) {
   setPhase("Restored");
   setStatus("Your last writing is back on the page.", "win");
   copyBtn.hidden = false;
+  continueBtn.hidden = false; // a restored entry can be picked back up too
   autosize();
   updateCounter();
   scrollTo(0, document.body.scrollHeight);
 }
+
+// "Keep going" starts a fresh timed run with whatever is on the page right now —
+// a finished session, an early stop, or a restored entry — instead of the seed.
+continueBtn.addEventListener("click", () => {
+  if (running || counting) return;
+  const text = editor.value;
+  if (!text.trim()) return;
+  start({ continueText: text });
+});
 
 restoreBtn.addEventListener("click", () => {
   const local = readLocalDraft();

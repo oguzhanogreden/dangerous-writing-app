@@ -274,7 +274,9 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
   /* The box grows with its content (JS-driven) up to the max, then scrolls. */
   padding: 1.5rem 0;
   font-family: var(--serif);
-  font-size: 1.18rem;
+  /* 1.1667rem = 18.67px = 14pt-equivalent (96/72 px-per-pt), matching print
+     body text (12-14pt) at a screen-viewing distance of 30-50cm. */
+  font-size: 1.1667rem;
   line-height: 1.75;
   color: var(--ink);
   background: transparent;
@@ -414,6 +416,17 @@ body.aiwriting #editor {
 }
 .restore:hover { background: var(--good); color: var(--paper); }
 
+/* "Keep going" is the primary post-run action, so it reads as filled rather
+   than the dashed outline the passive restore controls use. */
+.continue {
+  background: var(--good);
+  color: var(--paper);
+  border-style: solid;
+  transition: opacity 0.15s, transform 0.05s;
+}
+.continue:hover { opacity: 0.85; }
+.continue:active { transform: translateY(1px); }
+
 .entries-toggle {
   position: relative;
   padding-right: 2.2rem;
@@ -510,12 +523,88 @@ body.aiwriting #editor {
 }
 .auth-btn:hover { opacity: 0.85; }
 
+/* ---- grace meter ---- */
+/* Fixed to the viewport so it survives long writing and page scroll. It only
+   fades in once a quarter of the silence budget is gone (JS toggles .visible),
+   keeping the page calm while the writer is actually typing. */
+.gracebar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  padding-top: 1.5rem;
+  background: linear-gradient(to top, var(--paper) 55%, transparent);
+  transition: opacity 0.3s ease;
+}
+.gracebar.visible { opacity: 1; }
+
+.gracebar-label {
+  display: block;
+  max-width: 46rem; /* line up with the main column */
+  margin: 0 auto;
+  padding: 0 1.5rem 0.4rem;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  transition: color 0.25s;
+}
+
+.gracebar-track {
+  height: 3px;
+  background: var(--faint);
+}
+.gracebar-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--ink);
+  transition: background 0.25s;
+}
+
+/* Same red as the existing "Hold on…" ramp, so the two read as one warning. */
+body.warning .gracebar-fill { background: var(--danger); }
+body.warning .gracebar-label { color: var(--danger); }
+body.aiwriting .gracebar-fill { background: var(--ai); }
+body.aiwriting .gracebar-label { color: var(--ai); }
+
 .colophon {
   margin-top: 3.5rem;
   padding-top: 1.5rem;
   border-top: 1px solid var(--rule);
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+/* ---- focus mode ---- */
+/* While a countdown or writing run is active, hide the surrounding page
+   chrome so the writer stays visually locked onto the stage (editor, timer,
+   progress bar, grace bar) instead of the settings panel and marketing copy
+   above/below it. The Stop control (#startBtn) is the one .actions button
+   kept, since it's the only one still needed once a run is under way. */
+body.focus-mode .masthead,
+body.focus-mode .authbar,
+body.focus-mode .colophon {
+  display: none;
+}
+body.focus-mode .controls {
+  display: block;
+  border: none;
+  padding: 0;
+  margin-bottom: 1.5rem;
+}
+body.focus-mode .controls > *:not(.actions) {
+  display: none;
+}
+body.focus-mode .actions > *:not(#startBtn) {
+  display: none;
+}
+body.focus-mode main {
+  padding-top: clamp(1.25rem, 4vw, 2rem);
 }
 
 @media (min-width: 620px) {
