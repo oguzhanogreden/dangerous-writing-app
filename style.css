@@ -44,7 +44,7 @@ body {
    editor type (see #editor). Everything that isn't the writing itself stays
    at the original 46rem so the page reads unchanged above and below. */
 main {
-  max-width: 68rem;
+  max-width: 79rem;
   margin: 0 auto;
   padding: clamp(2.5rem, 6vw, 5rem) 1.5rem 7rem;
 }
@@ -56,12 +56,14 @@ main {
   margin-inline: auto;
 }
 
-/* 65rem ~= 65 characters at the 2rem editor type (a serif "0" advances about
-   0.5em), which is the 60-70 char measure of a printed page. Below ~1100px
-   the viewport binds first and the clamp shrinks the type in step, so the
-   measure stays in range rather than collapsing. */
+/* 76rem ~= 76 characters at the 2rem editor type (a serif "0" advances about
+   0.5em). Sized to restore the line length the editor had before the type
+   grew: at the old 18.67px in a 46rem column that was ~74 characters, and
+   doubling the type without widening the column had quietly cut it to ~65.
+   Below ~1300px the viewport binds first and the clamp shrinks the type in
+   step, so the measure holds rather than collapsing. */
 .stage {
-  max-width: 65rem;
+  max-width: 76rem;
   margin-inline: auto;
 }
 
@@ -574,7 +576,7 @@ body.aiwriting #editor {
 
 .gracebar-label {
   display: block;
-  max-width: 46rem; /* line up with the main column */
+  max-width: 79rem; /* match main's max-width so it lines up with the editor */
   margin: 0 auto;
   padding: 0 1.5rem 0.4rem;
   text-align: right;
@@ -652,9 +654,15 @@ body.focus-mode main {
    caret drift while you type. Locking both bounds to one value neutralises
    the inline height autosize() writes (min/max-height both beat `height`),
    so the box never moves and long text scrolls inside it instead. */
+/* 68vh on a roomy screen, but never more than the space actually left once
+   the Stop button, stage meta, foot and main's 7rem bottom padding are
+   accounted for (~300px) — otherwise a short laptop viewport would push the
+   stage into a scroll and undo the centring. Both bounds stay equal so the
+   box is still a fixed size at any given viewport, and the text does not
+   drift as it grows. */
 body.focus-mode #editor {
-  min-height: 56vh;
-  max-height: 56vh;
+  min-height: min(68vh, calc(100svh - 300px));
+  max-height: min(68vh, calc(100svh - 300px));
 }
 
 /* The timer deliberately stays loud (1.5rem, full ink) even in focus mode:
