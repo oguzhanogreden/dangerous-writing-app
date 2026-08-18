@@ -40,10 +40,29 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Wide enough for the stage to hold a book-length measure at the enlarged
+   editor type (see #editor). Everything that isn't the writing itself stays
+   at the original 46rem so the page reads unchanged above and below. */
 main {
-  max-width: 46rem;
+  max-width: 68rem;
   margin: 0 auto;
   padding: clamp(2.5rem, 6vw, 5rem) 1.5rem 7rem;
+}
+
+.masthead,
+.controls,
+.colophon {
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+/* 65rem ~= 65 characters at the 2rem editor type (a serif "0" advances about
+   0.5em), which is the 60-70 char measure of a printed page. Below ~1100px
+   the viewport binds first and the clamp shrinks the type in step, so the
+   measure stays in range rather than collapsing. */
+.stage {
+  max-width: 65rem;
+  margin-inline: auto;
 }
 
 /* ---- masthead ---- */
@@ -286,9 +305,10 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
      and reaches the full 2rem on a laptop (>=1400px). */
   font-size: clamp(1.25rem, 0.85rem + 1.5vw, 2rem);
   /* Leading tightens as type grows: 1.75 at 32px is 56px of air, which reads
-     as disconnected lines. 1.5 is still generous for screen and closer to
-     book practice, which runs 1.2-1.45. */
-  line-height: 1.5;
+     as disconnected lines. 1.6 gives 51px at the top of the clamp, while at
+     the 20px floor it still yields a 32px line box — parity with the old
+     18.67px/1.75, so small screens don't end up tighter than before. */
+  line-height: 1.6;
   color: var(--ink);
   background: transparent;
   border: none;
