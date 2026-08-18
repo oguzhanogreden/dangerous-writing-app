@@ -274,10 +274,21 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
   /* The box grows with its content (JS-driven) up to the max, then scrolls. */
   padding: 1.5rem 0;
   font-family: var(--serif);
-  /* 1.1667rem = 18.67px = 14pt-equivalent (96/72 px-per-pt), matching print
-     body text (12-14pt) at a screen-viewing distance of 30-50cm. */
-  font-size: 1.1667rem;
-  line-height: 1.75;
+  /* Sized to read like a paper book held at 25cm, but at arm's length.
+     Matching a *visual angle*, not a point size: book body text of 11pt is
+     3.88mm tall and subtends 3.88/250 = 15.5 mrad at 25cm. To subtend that
+     same angle on a screen ~55cm away the glyphs must be 15.5e-3 x 550 =
+     8.5mm — i.e. 24pt, or 32px, or 2rem at the default 16px root.
+     That is ~1.7x the old 1.1667rem, which had assumed a 30-50cm screen
+     distance (see bd dangerous-writing-app-c46.2); this supersedes it.
+     Scaled down on narrow viewports, where 32px would leave only ~30
+     characters per line — the vw term keeps the measure readable on phones
+     and reaches the full 2rem on a laptop (>=1400px). */
+  font-size: clamp(1.25rem, 0.85rem + 1.5vw, 2rem);
+  /* Leading tightens as type grows: 1.75 at 32px is 56px of air, which reads
+     as disconnected lines. 1.5 is still generous for screen and closer to
+     book practice, which runs 1.2-1.45. */
+  line-height: 1.5;
   color: var(--ink);
   background: transparent;
   border: none;
