@@ -6,3 +6,6 @@
 
 # Beads / Dolt files (added by bd init)
 .beads/proxieddb/
+
+# Beads lock file (repo root, outside .beads/)
+.beads.gate.lock
