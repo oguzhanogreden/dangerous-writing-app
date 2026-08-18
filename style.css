@@ -603,8 +603,37 @@ body.focus-mode .controls > *:not(.actions) {
 body.focus-mode .actions > *:not(#startBtn) {
   display: none;
 }
+/* Centre the stage in the viewport. The 7rem bottom padding from `main` is
+   deliberately kept: it clears the fixed grace bar, so the stage settles a
+   little above true centre rather than colliding with the countdown rule. */
 body.focus-mode main {
   padding-top: clamp(1.25rem, 4vw, 2rem);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Pin the editor to a single height while a run is on. Normally the box grows
+   with its content (autosize(), client.js:145) between min-height 44vh and
+   max-height 70vh — but inside a centred container that growth pushes the
+   already-written text upward half a line at a time, so the words above the
+   caret drift while you type. Locking both bounds to one value neutralises
+   the inline height autosize() writes (min/max-height both beat `height`),
+   so the box never moves and long text scrolls inside it instead. */
+body.focus-mode #editor {
+  min-height: 56vh;
+  max-height: 56vh;
+}
+
+/* The timer deliberately stays loud (1.5rem, full ink) even in focus mode:
+   this app's premise is time pressure, and a recessive clock would soften the
+   thing that makes the writing dangerous. The quieter foot items drop to the
+   same 0.72rem as .copy instead, so the row below the editor reads as one
+   uniform line of small print rather than competing for attention. */
+body.focus-mode .counter,
+body.focus-mode .status {
+  font-size: 0.72rem;
 }
 
 @media (min-width: 620px) {
