@@ -6,3 +6,6 @@ node_modules
 vendor
 .beads
 .claude
+.agents
+.codex
+.beads.gate.lock
