@@ -12,6 +12,9 @@ const wordsEl = document.getElementById("words");
 const progress = document.getElementById("progressInner");
 const countdownEl = document.getElementById("countdown");
 const countNum = document.getElementById("countNum");
+const demoIntro = document.getElementById("demoIntro");
+const demoIntroText = document.getElementById("demoIntroText");
+const demoIntroGo = document.getElementById("demoIntroGo");
 const aiMode = document.getElementById("aiMode");
 const demoBtn = document.getElementById("demoBtn");
 const copyBtn = document.getElementById("copyBtn");
@@ -26,12 +29,115 @@ const graceLabel = document.getElementById("graceLabel");
 const authStatus = document.getElementById("authStatus");
 const authBtn = document.getElementById("authBtn");
 
+// ---- Task: global session-lifecycle state ----
+// One global object, inspectable as `Task` in devtools, tracking which stage
+// of a writing session we're in.
+
+/**
+ * @typedef {"LAND" | "COUNTDOWN" | "WRITE" | "DONE" | "FIRST_DEMO"} Stage
+ * LAND = idle/ready. COUNTDOWN = "3,2,1,Write!". WRITE = the clock is
+ * running. DONE = finished, stopped early, or a past draft was restored.
+ * FIRST_DEMO = the demo preset was started — replaces COUNTDOWN for the
+ * "Start demo" flow specifically, so a demo run is distinguishable from an
+ * ordinary one from the moment it begins.
+ */
+
+/**
+ * Leaf names nested inside "stage" — closed, kebab-case, joined onto their
+ * parent with "/" (see Section below). Currently just "demo": it's
+ * FIRST_DEMO's own identity in the layout system rather than an alias for
+ * plain "stage", even though it drives identical CSS today via the `^=`
+ * prefix rules in style.css. Add a member here (and a matching CSS rule)
+ * the day a demo-specific layout is actually needed, without inventing a
+ * second Record or a second setter alongside STAGE_LAYOUT/setStage.
+ * @typedef {"demo"} StageSub
+ */
+
+/**
+ * Which section of the mobile zoom layout is enlarged — see
+ * setActiveSection() below and the [data-active] rules in style.css.
+ * "begin" is the standalone Begin/Stop control (#beginBox), a first-class
+ * box alongside "stage" and "controls" — not nested inside either.
+ * Hierarchical values are kebab-case path segments joined with "/"; a
+ * child's path always starts with its parent's name (e.g. "stage/demo"
+ * starts with "stage"), so CSS matches "this section or any of its
+ * children" with one prefix selector (main[data-active^="stage"]) instead
+ * of enumerating every leaf.
+ * @typedef {"begin" | "stage" | "controls" | "entries" | `stage/${StageSub}`} Section
+ */
+
+/**
+ * The layout each stage forces into view, so a new stage can't be added
+ * without also deciding what it does to the screen. `null` means the stage
+ * doesn't override. LAND defaults to "begin" — the writer's one job on
+ * landing is to see and press Begin — but LAND is still the only stage that
+ * lets interaction move away from it (touching a slider or the entries list
+ * still switches the active section; see the listeners below).
+ * @type {Record<Stage, Section | null>}
+ */
+const STAGE_LAYOUT = {
+  LAND: "begin",
+  COUNTDOWN: "stage",
+  WRITE: "stage",
+  DONE: "stage",
+  FIRST_DEMO: "stage/demo", // same box as COUNTDOWN (^= prefix match), own identity
+};
+
+const TASK_KEY = "dangerous-writing:task";
+
+// `var` (not const) so this is both a plain script-global `Task` identifier
+// tsc/JSDoc can resolve, and — since it's a top-level var in a classic
+// script — a `window.Task` property, inspectable in devtools.
+/** @type {{ stage: Stage }} */
+var Task = { stage: "LAND" };
+
+function persistTask() {
+  try {
+    localStorage.setItem(TASK_KEY, JSON.stringify({ stage: Task.stage }));
+  } catch {
+    // storage unavailable — Task still drives the UI for this page view
+  }
+}
+
+function restoreTask() {
+  try {
+    const raw = localStorage.getItem(TASK_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw);
+    // COUNTDOWN/WRITE have no live timer to resume after a reload, so only
+    // the two static stages carry across page loads.
+    if (parsed && (parsed.stage === "LAND" || parsed.stage === "DONE")) {
+      Task.stage = parsed.stage;
+    }
+  } catch {
+    // corrupt value — LAND (the default) is already in place
+  }
+}
+restoreTask();
+
+/**
+ * Moves the Task to a new stage, persists it, and applies that stage's
+ * layout via STAGE_LAYOUT — the one place Stage and Section are wired
+ * together.
+ * @param {Stage} stage
+ */
+function setStage(stage) {
+  Task.stage = stage;
+  persistTask();
+  const section = STAGE_LAYOUT[stage];
+  if (section) setActiveSection(section);
+}
+
 // Aggressive preset so first-timers feel the pressure instantly: a tiny goal,
 // almost no grace period, and a snap countdown.
 const DEMO_CONFIG = {
   goalSeconds: 30, // total run is only 30 seconds
   graceSeconds: 2, // you get barely 2 seconds of silence
 };
+
+// How long the demo intro overlay stays up before auto-starting — long
+// enough to read the two-sentence explanation once.
+const DEMO_INTRO_MS = 4500;
 
 const SEED_TEXT =
   "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Keep this text " +
@@ -56,7 +162,12 @@ let aiTypeTimer = null; // interval id for the char-by-char typing
 let aiChars = 0; // total characters the AI has authored this run
 let humanChars = 0; // characters the human authored this run (best-effort)
 
-const DECAY_CHARS_PER_SEC = 12;
+const DECAY_CHARS_PER_SEC = 12; // floor: a short run always burns out to blank
+// Extra decay proportional to text length, so a long carry-over still stands a
+// real stake to idling instead of taking minutes to dissolve. Combined with the
+// floor above it decays ~5% of whatever is on screen per second, giving a
+// continued run a comparable *share* of loss to a fresh one over the same idle.
+const DECAY_FRACTION_PER_SEC = 0.05;
 const AI_TYPE_MS = 24; // ms per character when the AI types
 // The grace meter stays hidden until this share of the silence budget is spent,
 // so it doesn't flicker at full while the writer is mid-sentence.
@@ -172,19 +283,31 @@ function snippet(text, max = 90) {
   return t.length > max ? t.slice(0, max).trimEnd() + "…" : t;
 }
 
-// Drive the fixed grace meter: how much silence is left before decay or the AI
-// takeover. Pass null to retire it (no run in progress).
+// Drive the fixed grace meter: how much silence is left before decay or the
+// AI takeover. See countdown-bar.js — the /debug page's auto-refresh
+// indicator uses the same component.
+const graceCountdown = createCountdownBar({
+  container: graceBar,
+  fill: graceFill,
+  label: graceLabel,
+  formatLabel: (left) => (left / 1000).toFixed(1) + "s of silence left",
+  revealFraction: GRACE_REVEAL,
+});
+
+// Pass null to retire it (no run in progress).
 function setGrace(remainingMs) {
-  if (remainingMs === null || !inactivityMs) {
-    graceBar.classList.remove("visible");
-    return;
-  }
-  const left = Math.max(0, remainingMs);
-  const frac = Math.min(1, left / inactivityMs);
-  graceFill.style.width = (frac * 100).toFixed(1) + "%";
-  graceLabel.textContent = (left / 1000).toFixed(1) + "s of silence left";
-  graceBar.classList.toggle("visible", frac <= 1 - GRACE_REVEAL);
+  graceCountdown.update(remainingMs, inactivityMs);
 }
+
+// Same fixed bottom bar, a second consumer: while the demo intro overlay is
+// up (before WRITE starts, so graceCountdown above is idle), it reads as a
+// "starting in..." timer instead of a silence budget.
+const introCountdown = createCountdownBar({
+  container: graceBar,
+  fill: graceFill,
+  label: graceLabel,
+  formatLabel: (left) => "Demo starting in " + (left / 1000).toFixed(1) + "s — or tap Go",
+});
 
 // "Keep going" is only worth offering when there is writing to carry forward —
 // not on an empty page, and not on untouched seed text (cancelled countdown).
@@ -200,6 +323,41 @@ function cancelCountdown() {
   }
   counting = false;
   countdownEl.hidden = true;
+  demoIntro.hidden = true;
+  cancelDemoIntroCountdown();
+}
+
+// The demo intro overlay auto-advances once it's had time to be read;
+// tapping Go does the same thing early. Either way this is the one path in.
+let demoIntroRafId = null;
+
+function beginDemoCountdown() {
+  cancelDemoIntroCountdown();
+  demoIntro.hidden = true;
+  runCountdown(true);
+}
+
+function cancelDemoIntroCountdown() {
+  if (demoIntroRafId !== null) {
+    cancelAnimationFrame(demoIntroRafId);
+    demoIntroRafId = null;
+  }
+  introCountdown.hide();
+}
+
+function startDemoIntroCountdown() {
+  const deadline = performance.now() + DEMO_INTRO_MS;
+  function tick(now) {
+    const left = deadline - now;
+    if (left <= 0) {
+      demoIntroRafId = null;
+      beginDemoCountdown();
+      return;
+    }
+    introCountdown.update(left, DEMO_INTRO_MS);
+    demoIntroRafId = requestAnimationFrame(tick);
+  }
+  demoIntroRafId = requestAnimationFrame(tick);
 }
 
 // Stop any in-progress AI typing and hand control back to the writer.
@@ -455,6 +613,7 @@ refreshAuth();
 function start(opts = {}) {
   if (counting || running) return;
   const demo = !!opts.demo;
+  setStage(demo ? "FIRST_DEMO" : "COUNTDOWN");
 
   if (demo) {
     goalMs = DEMO_CONFIG.goalSeconds * 1000;
@@ -495,15 +654,27 @@ function start(opts = {}) {
   setGrace(null); // no silence budget until the clock actually starts
   progress.style.width = "0%";
   progress.style.background = "var(--ink)";
-  setStatus(
-    demo
-      ? `Demo: ${DEMO_CONFIG.goalSeconds}s to survive, ${DEMO_CONFIG.graceSeconds}s grace. Brutal.`
-      : "",
-    demo ? "danger" : "",
-  );
+  setStatus("");
 
-  runCountdown(demo);
+  if (demo) {
+    // First stage of the demo intro: explain the aggressive preset and wait
+    // for the writer to opt in, rather than snapping straight into the
+    // countdown. `counting` is set here (not just inside runCountdown()) so
+    // every existing guard — stop(), the re-entry checks on start()/demoBtn/
+    // continueBtn/restoreBtn — already treats "waiting on Go" the same as
+    // "counting down": nothing of the writer's is on screen yet to lose.
+    counting = true;
+    demoIntroText.textContent =
+      `This is the demo: ${DEMO_CONFIG.goalSeconds} seconds to write, only ` +
+      `${DEMO_CONFIG.graceSeconds} seconds of quiet before the machine takes the pen.`;
+    demoIntro.hidden = false;
+    startDemoIntroCountdown();
+  } else {
+    runCountdown(demo);
+  }
 }
+
+demoIntroGo.addEventListener("click", beginDemoCountdown);
 
 // Abort a run or countdown early, leaving whatever text survived.
 function stop() {
@@ -521,10 +692,13 @@ function stop() {
 
   setPhase("Stopped");
   if (wasCounting) {
-    // Only the seed text was on screen; nothing of yours to save.
+    // Only the seed text was on screen; nothing of yours to save, so there's
+    // no session to show — back to the landing stage.
+    setStage("LAND");
     setStatus("Cancelled before the clock started.");
     copyBtn.hidden = true;
   } else {
+    setStage("DONE");
     saveAndAnnounce(
       editor.value,
       "Stopped early — what survived is saved to this browser.",
@@ -577,6 +751,7 @@ function runCountdown(demo = false) {
 
 function beginRun(demo = false) {
   running = true;
+  setStage("WRITE");
   startTime = performance.now();
   lastTyped = startTime;
   lastFrame = 0;
@@ -598,8 +773,8 @@ function beginRun(demo = false) {
   } else {
     const secs = Math.round(inactivityMs / 1000);
     setStatus(
-      `${secs} ${secs === 1 ? "second" : "seconds"} of silence allowed — then ` +
-        (aiMode.checked ? "the machine takes over." : "your words start to go."),
+      `${secs} ${secs === 1 ? "second" : "seconds"} of quiet allowed — then ` +
+        (aiMode.checked ? "the machine continues for you." : "your words start to drift."),
     );
   }
 
@@ -609,6 +784,7 @@ function beginRun(demo = false) {
 
 function finish(won) {
   running = false;
+  setStage("DONE");
   cancelAnimationFrame(rafId);
   stopAi();
   setBody("warning", false);
@@ -625,10 +801,10 @@ function finish(won) {
     progress.style.width = "100%";
     if (pct >= 50) {
       progress.style.background = "var(--ai)";
-      setPhase("Outwritten");
+      setPhase("Shared");
       saveAndAnnounce(
         editor.value,
-        `The machine wrote ${pct}% of this. It's mostly not yours.`,
+        `The machine wrote ${pct}% of this one. Want to take it back?`,
         "danger",
       );
     } else {
@@ -647,8 +823,8 @@ function finish(won) {
     saveAndAnnounce(editor.value, "Your words are safe.", "win");
   } else {
     progress.style.width = "0%";
-    setPhase("Gone");
-    setStatus(blank ? "The page is blank." : "The page is blank again.", "danger");
+    setPhase("Done");
+    setStatus(blank ? "The page is empty — that's okay." : "The page is empty again — start when you're ready.", "danger");
     copyBtn.hidden = true;
   }
 
@@ -658,6 +834,7 @@ function finish(won) {
   minutes.disabled = false;
   seconds.disabled = false;
   aiMode.disabled = false;
+  demoBtn.disabled = false;
 }
 
 // Ask the server for a continuation, then type it into the editor.
@@ -744,18 +921,22 @@ function loop(now) {
       setBody("aiwriting", true);
       editor.style.setProperty("--fade", "0");
       progress.style.background = "var(--ai)";
-      setPhase("AI is writing…");
-      setStatus("Type to wrestle the pen back.", "danger");
+      setPhase("Passing the pen");
+      setStatus("Start typing to take it back.", "danger");
       triggerAiTakeover();
     } else {
       // ERASE: decay characters from the end.
       setBody("warning", true);
       setBody("decaying", true);
       progress.style.background = "var(--danger)";
-      setPhase("Decaying");
+      setPhase("Fading");
       editor.style.setProperty("--fade", "0");
 
-      decayAcc += (DECAY_CHARS_PER_SEC * dt) / 1000;
+      const decayRate = Math.max(
+        DECAY_CHARS_PER_SEC,
+        editor.value.length * DECAY_FRACTION_PER_SEC,
+      );
+      decayAcc += (decayRate * dt) / 1000;
       const toRemove = Math.floor(decayAcc);
       if (toRemove > 0) {
         decayAcc -= toRemove;
@@ -763,7 +944,7 @@ function loop(now) {
         autosize(); // shrink the box back down as the words dissolve
         updateCounter();
       }
-      setStatus("Keep typing — your words are vanishing.", "danger");
+      setStatus("Keep going — the words are drifting away.", "danger");
 
       if (editor.value.length === 0) {
         finish(false);
@@ -784,13 +965,13 @@ function loop(now) {
     if (warn) {
       if (aiMode.checked) {
         editor.style.setProperty("--fade", "0");
-        setPhase("Hold on…");
-        setStatus("Stop now and the machine takes over.", "danger");
+        setPhase("Breathe…");
+        setStatus("Pause and the machine continues for you.", "danger");
       } else {
         const fade = Math.min(1, (idle - warnStart) / WARN_MS);
         editor.style.setProperty("--fade", fade.toFixed(3));
-        setPhase("Hold on…");
-        setStatus("Your words are dissolving.", "danger");
+        setPhase("Breathe…");
+        setStatus("Your words are beginning to drift.", "danger");
       }
     } else {
       editor.style.setProperty("--fade", "0");
@@ -841,6 +1022,7 @@ demoBtn.addEventListener("click", () => {
 function restoreTextToEditor(text) {
   if (running || counting) return;
   if (!text) return;
+  setStage("DONE");
   editor.value = text;
   editor.disabled = false;
   lockEditor();
@@ -871,3 +1053,35 @@ copyBtn.addEventListener("click", copyText);
 
 // On load, offer to restore the most recent writing.
 maybeShowRestore();
+
+// ---- mobile zoom layout: track active section ----
+// Which section is enlarged on a narrow viewport. During COUNTDOWN/WRITE/DONE
+// this is locked to "stage" by setStage() + STAGE_LAYOUT above; during LAND
+// it follows whatever the writer last touched.
+/**
+ * @param {Section} section
+ */
+function setActiveSection(section) {
+  const main = document.querySelector("main");
+  if (main) main.setAttribute("data-active", section);
+}
+
+// Editor interactions
+editor.addEventListener("focus", () => setActiveSection("stage"));
+
+// Control interactions
+minutes.addEventListener("input", () => setActiveSection("controls"));
+seconds.addEventListener("input", () => setActiveSection("controls"));
+aiMode.addEventListener("change", () => setActiveSection("controls"));
+
+// Entries panel: hook into existing toggle
+entriesBtn.addEventListener("click", () => {
+  if (entriesBtn.getAttribute("aria-expanded") === "true") {
+    setActiveSection("entries");
+  }
+});
+
+// Apply the restored (or default) Task stage to the layout on load, via
+// STAGE_LAYOUT: LAND shows the big Begin button, DONE shows whatever was
+// last written.
+setStage(Task.stage);

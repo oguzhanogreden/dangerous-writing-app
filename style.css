@@ -1,27 +1,31 @@
 :root {
-  --paper: #fcfcfa;
-  --ink: #1a1a1a;
-  --muted: #6b6b6b;
-  --faint: #e6e4df;
-  --rule: #d9d6cf;
-  --accent: #1a1a1a;
-  --danger: #c0392b;
-  --good: #2e7d4f;
-  --ai: #6c4cff;
+  /* A warm, soft paper base instead of stark white/black: cream ground, warm
+     charcoal ink, and a muted sage/lilac/terracotta accent set that reads
+     calm and friendly rather than alarm-red and editorial-black. */
+  --paper: #fbf8f2;
+  --ink: #322c26;
+  --muted: #8b8377;
+  --faint: #f0e9db;
+  --rule: #e0d7c8;
+  --accent: #322c26;
+  --danger: #c05c4d;
+  --good: #6b8d6f;
+  --ai: #7b6ed0;
   --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
   --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #14140f;
-    --ink: #eceae3;
-    --muted: #9a978d;
-    --faint: #26261f;
-    --rule: #34332b;
-    --accent: #eceae3;
-    --danger: #ff6b5e;
-    --good: #6fcf97;
+    --paper: #1c1916;
+    --ink: #ece6dd;
+    --muted: #a89f90;
+    --faint: #2b2722;
+    --rule: #3b352d;
+    --accent: #ece6dd;
+    --danger: #d98a7b;
+    --good: #96ba9a;
+    --ai: #b1a6ef;
   }
 }
 
@@ -40,18 +44,38 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Wide enough for the stage to hold a book-length measure at the enlarged
+   editor type (see #editor). Everything that isn't the writing itself stays
+   at the original 46rem so the page reads unchanged above and below. */
 main {
-  max-width: 46rem;
+  max-width: 79rem;
   margin: 0 auto;
   padding: clamp(2.5rem, 6vw, 5rem) 1.5rem 7rem;
 }
 
+.masthead,
+.controls,
+.colophon {
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+/* 76rem ~= 76 characters at the 2rem editor type (a serif "0" advances about
+   0.5em). Sized to restore the line length the editor had before the type
+   grew: at the old 18.67px in a 46rem column that was ~74 characters, and
+   doubling the type without widening the column had quietly cut it to ~65.
+   Below ~1300px the viewport binds first and the clamp shrinks the type in
+   step, so the measure holds rather than collapsing. */
+.stage {
+  max-width: 76rem;
+  margin-inline: auto;
+}
+
 /* ---- masthead ---- */
 .kicker {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.05rem;
   color: var(--muted);
   margin-bottom: 1rem;
 }
@@ -89,10 +113,9 @@ h1 {
 }
 
 .control label {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.05rem;
   color: var(--ink);
 }
 
@@ -184,30 +207,47 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
 }
 .toggle-text { display: flex; flex-direction: column; gap: 0.15rem; }
 .toggle-title {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.05rem;
   color: var(--ink);
 }
 .toggle-sub { font-size: 0.92rem; color: var(--muted); }
 
+/* ---- begin box ---- */
+/* Its own component (see index.html), not a grid/flex item inside .controls,
+   so the mobile zoom layout can enlarge it independently of the settings
+   panel. On LAND — the writer's one job — it's the loud, oversized call to
+   action; in every other stage it's a normal-sized Stop / Begin again
+   control that stays reachable. */
+.begin-box {
+  max-width: 46rem;
+  margin: 0 auto 2.75rem;
+}
+
 .start {
-  justify-self: start;
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  padding: 0.7rem 2rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.02rem;
+  padding: 0.8rem 2.1rem;
   background: var(--ink);
   color: var(--paper);
   border: 1px solid var(--ink);
   border-radius: 999px;
   cursor: pointer;
-  transition: opacity 0.15s, transform 0.05s;
+  transition: opacity 0.15s, transform 0.05s, padding 0.15s, font-size 0.15s;
 }
 .start:hover { opacity: 0.85; }
 .start:active { transform: translateY(1px); }
 .start:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Large whenever "begin" is the active section — which, per STAGE_LAYOUT in
+   client.js, only ever happens on LAND. Landing is the one moment this
+   button is the entire point of the page. */
+main[data-active="begin"] .start {
+  font-size: 1.35rem;
+  padding: 1.15rem 3rem;
+}
 
 .actions {
   display: flex;
@@ -216,18 +256,18 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
   gap: 0.75rem;
 }
 .demo {
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  padding: 0.7rem 1.6rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.02rem;
+  padding: 0.8rem 1.8rem;
   background: transparent;
-  color: var(--danger);
-  border: 1px solid var(--danger);
+  color: var(--muted);
+  border: 1px solid var(--rule);
   border-radius: 999px;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, transform 0.05s;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, transform 0.05s;
 }
-.demo:hover { background: var(--danger); color: var(--paper); }
+.demo:hover { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
 .demo:active { transform: translateY(1px); }
 .demo:disabled { opacity: 0.35; cursor: not-allowed; }
 
@@ -239,10 +279,9 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
   margin-bottom: 0.7rem;
 }
 .phase {
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 1.02rem;
   color: var(--muted);
   transition: color 0.25s;
 }
@@ -274,10 +313,22 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
   /* The box grows with its content (JS-driven) up to the max, then scrolls. */
   padding: 1.5rem 0;
   font-family: var(--serif);
-  /* 1.1667rem = 18.67px = 14pt-equivalent (96/72 px-per-pt), matching print
-     body text (12-14pt) at a screen-viewing distance of 30-50cm. */
-  font-size: 1.1667rem;
-  line-height: 1.75;
+  /* Sized to read like a paper book held at 25cm, but at arm's length.
+     Matching a *visual angle*, not a point size: book body text of 11pt is
+     3.88mm tall and subtends 3.88/250 = 15.5 mrad at 25cm. To subtend that
+     same angle on a screen ~55cm away the glyphs must be 15.5e-3 x 550 =
+     8.5mm — i.e. 24pt, or 32px, or 2rem at the default 16px root.
+     That is ~1.7x the old 1.1667rem, which had assumed a 30-50cm screen
+     distance (see bd dangerous-writing-app-c46.2); this supersedes it.
+     Scaled down on narrow viewports, where 32px would leave only ~30
+     characters per line — the vw term keeps the measure readable on phones
+     and reaches the full 2rem on a laptop (>=1400px). */
+  font-size: clamp(1.25rem, 0.85rem + 1.5vw, 2rem);
+  /* Leading tightens as type grows: 1.75 at 32px is 56px of air, which reads
+     as disconnected lines. 1.6 gives 51px at the top of the clamp, while at
+     the 20px floor it still yields a 32px line box — parity with the old
+     18.67px/1.75, so small screens don't end up tighter than before. */
+  line-height: 1.6;
   color: var(--ink);
   background: transparent;
   border: none;
@@ -329,8 +380,39 @@ body.aiwriting #editor {
 }
 .toggle input:checked + .toggle-track { background: var(--ai); }
 
-/* countdown overlay */
+/* demo intro overlay — first stage of the demo flow: explain the aggressive
+   preset and require a click before the countdown runs. Same overlay slot
+   as .countdown (only one is ever unhidden at a time), styled to read as
+   a calm explainer rather than the urgent countdown flash. */
 .editor-wrap { position: relative; }
+.demo-intro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  background: color-mix(in srgb, var(--paper) 92%, transparent);
+  backdrop-filter: blur(2px);
+  z-index: 2;
+}
+.demo-intro[hidden] { display: none; }
+.demo-intro-body {
+  max-width: 26rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.25rem;
+  text-align: center;
+}
+.demo-intro-text {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 1.05rem;
+  color: var(--ink);
+}
+
+/* countdown overlay */
 .countdown {
   position: absolute;
   inset: 0;
@@ -379,11 +461,9 @@ body.aiwriting #editor {
   font-variant-numeric: tabular-nums;
 }
 .copy {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.3rem 0.8rem;
+  font-family: var(--serif);
+  font-size: 0.9rem;
+  padding: 0.35rem 0.9rem;
   background: transparent;
   color: var(--accent);
   border: 1px solid var(--rule);
@@ -403,10 +483,10 @@ body.aiwriting #editor {
 .status.win { color: var(--good); }
 
 .restore {
-  font-family: var(--mono);
-  font-size: 0.85rem;
-  letter-spacing: 0.06em;
-  padding: 0.7rem 1.4rem;
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 1.02rem;
+  padding: 0.8rem 1.5rem;
   background: transparent;
   color: var(--good);
   border: 1px dashed var(--good);
@@ -475,9 +555,8 @@ body.aiwriting #editor {
   outline: none;
 }
 .entries-item-time {
-  font-family: var(--mono);
-  font-size: 0.72rem;
-  letter-spacing: 0.04em;
+  font-family: var(--serif);
+  font-size: 0.82rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
@@ -509,11 +588,9 @@ body.aiwriting #editor {
 }
 .auth-btn {
   flex: none;
-  font-family: var(--mono);
-  font-size: 0.78rem;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  padding: 0.5rem 1rem;
+  font-family: var(--serif);
+  font-size: 0.95rem;
+  padding: 0.5rem 1.1rem;
   background: var(--ink);
   color: var(--paper);
   border: 1px solid var(--ink);
@@ -536,6 +613,7 @@ body.aiwriting #editor {
   pointer-events: none;
   opacity: 0;
   padding-top: 1.5rem;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   background: linear-gradient(to top, var(--paper) 55%, transparent);
   transition: opacity 0.3s ease;
 }
@@ -543,7 +621,7 @@ body.aiwriting #editor {
 
 .gracebar-label {
   display: block;
-  max-width: 46rem; /* line up with the main column */
+  max-width: 79rem; /* match main's max-width so it lines up with the editor */
   margin: 0 auto;
   padding: 0 1.5rem 0.4rem;
   text-align: right;
@@ -584,8 +662,8 @@ body.aiwriting .gracebar-label { color: var(--ai); }
 /* While a countdown or writing run is active, hide the surrounding page
    chrome so the writer stays visually locked onto the stage (editor, timer,
    progress bar, grace bar) instead of the settings panel and marketing copy
-   above/below it. The Stop control (#startBtn) is the one .actions button
-   kept, since it's the only one still needed once a run is under way. */
+   above/below it. #beginBox (the Stop control) lives outside .controls now,
+   so it's untouched by any of this and stays reachable throughout. */
 body.focus-mode .masthead,
 body.focus-mode .authbar,
 body.focus-mode .colophon {
@@ -600,11 +678,46 @@ body.focus-mode .controls {
 body.focus-mode .controls > *:not(.actions) {
   display: none;
 }
-body.focus-mode .actions > *:not(#startBtn) {
+body.focus-mode .actions {
   display: none;
 }
+/* Centre the stage in the viewport. The 7rem bottom padding from `main` is
+   deliberately kept: it clears the fixed grace bar, so the stage settles a
+   little above true centre rather than colliding with the countdown rule. */
 body.focus-mode main {
   padding-top: clamp(1.25rem, 4vw, 2rem);
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Pin the editor to a single height while a run is on. Normally the box grows
+   with its content (autosize(), client.js:145) between min-height 44vh and
+   max-height 70vh — but inside a centred container that growth pushes the
+   already-written text upward half a line at a time, so the words above the
+   caret drift while you type. Locking both bounds to one value neutralises
+   the inline height autosize() writes (min/max-height both beat `height`),
+   so the box never moves and long text scrolls inside it instead. */
+/* 68vh on a roomy screen, but never more than the space actually left once
+   the Stop button, stage meta, foot and main's 7rem bottom padding are
+   accounted for (~300px) — otherwise a short laptop viewport would push the
+   stage into a scroll and undo the centring. Both bounds stay equal so the
+   box is still a fixed size at any given viewport, and the text does not
+   drift as it grows. */
+body.focus-mode #editor {
+  min-height: min(68vh, calc(100svh - 300px));
+  max-height: min(68vh, calc(100svh - 300px));
+}
+
+/* The timer deliberately stays loud (1.5rem, full ink) even in focus mode:
+   this app's premise is time pressure, and a recessive clock would soften the
+   thing that makes the writing dangerous. The quieter foot items drop to the
+   same 0.72rem as .copy instead, so the row below the editor reads as one
+   uniform line of small print rather than competing for attention. */
+body.focus-mode .counter,
+body.focus-mode .status {
+  font-size: 0.72rem;
 }
 
 @media (min-width: 620px) {
@@ -612,6 +725,113 @@ body.focus-mode main {
     grid-template-columns: 1fr 1fr;
     align-items: start;
   }
-  .start { grid-column: 1 / -1; }
   #entriesPanel { grid-column: 1 / -1; }
+}
+
+/* Mobile-first: comfortable touch targets and a full-width primary action so
+   the calm layout reads as a small app rather than a crowded page on a phone. */
+@media (max-width: 619px) {
+  /* Flexbox-based zoom layout: the section named by <main data-active="…">
+     (set from client.js, driven by the global Task's stage — see setStage())
+     enlarges to dominate the viewport; the others shrink but stay visible,
+     so the writer always has a sense of what's reachable. No animation: the
+     flex properties just change outright. */
+  main {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding-top: 1.5rem;
+    padding-bottom: 7rem;
+    min-height: 100vh;
+  }
+
+  .masthead,
+  .authbar,
+  .colophon {
+    display: none;
+  }
+
+  .begin-box,
+  .controls,
+  .stage {
+    flex: 0 0 auto;
+    max-width: 100%;
+    margin: 0;
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+
+  /* LAND's whole job: a Begin button that dominates the screen. Elsewhere
+     (COUNTDOWN/WRITE/DONE all force data-active="stage" — see STAGE_LAYOUT
+     in client.js) it drops back to an ordinary, small Stop / Begin again
+     control docked below the shrunk stage/controls. */
+  main[data-active="begin"] .begin-box {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 60vh;
+  }
+  main[data-active="begin"] .start {
+    width: 100%;
+    max-width: 22rem;
+    font-size: 1.6rem;
+    padding: 1.75rem 2rem;
+  }
+
+  /* Settings (sliders, AI toggle) and the entries list collapse by default —
+     only .actions (Begin/Stop + the secondary buttons) stays reachable no
+     matter which section is active, same treatment as desktop focus-mode. */
+  .controls > *:not(.actions) {
+    display: none;
+  }
+  main[data-active="controls"] .controls > *:not(.actions):not(.entries-panel) {
+    display: block;
+  }
+  main[data-active="controls"] .controls {
+    flex: 1 1 auto;
+    min-height: 50vh;
+    overflow-y: auto;
+  }
+
+  main[data-active="entries"] .controls > .entries-panel:not([hidden]) {
+    display: block;
+  }
+  main[data-active="entries"] .entries-panel {
+    min-height: 45vh;
+    overflow-y: auto;
+  }
+
+  /* The stage (editor) becomes active once STAGE_LAYOUT locks onto it for
+     COUNTDOWN/WRITE/DONE, or if the writer taps into it during LAND. `^=`
+     (starts-with) rather than `=` so this also matches any hierarchical
+     child value ("stage/demo") without a separate rule per child — see the
+     Section typedef in client.js. */
+  main[data-active^="stage"] .stage {
+    flex: 1 1 auto;
+    min-height: 60vh;
+  }
+  main:not([data-active^="stage"]) .stage {
+    flex: 0 0 auto;
+    max-height: 18vh;
+    overflow: hidden;
+  }
+  /* #editor has its own min-height (44vh) set elsewhere in this file, which
+     would otherwise force .stage back open even while shrunk above. */
+  main:not([data-active^="stage"]) #editor {
+    min-height: 0;
+    max-height: 10vh;
+  }
+
+  .controls { gap: 1.5rem; }
+  .actions { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+  .start,
+  .demo,
+  .restore {
+    min-height: 3rem;
+  }
+  .start { width: 100%; }
+  .demo,
+  .restore { flex: 1 1 auto; }
+  .gracebar-label { padding-right: 1.5rem; }
 }

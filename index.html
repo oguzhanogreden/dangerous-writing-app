@@ -13,14 +13,14 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <main>
+  <main data-active="begin">
     <header class="masthead">
-      <div class="kicker">A writing experiment</div>
+      <div class="kicker">A quiet place to write</div>
       <h1>Dangerous&nbsp;writing</h1>
       <p class="lede">
-        Set a goal and a tolerance for silence, then write without stopping. Pause
-        for too long and the words begin to erase themselves, one character at a
-        time, until you start typing again — or until there is nothing left.
+        Set a goal and a little patience for silence, then write — and keep
+        writing. When you pause, the words begin to drift, a little at a time,
+        until you pick the pen back up. Go at your own pace.
       </p>
     </header>
 
@@ -58,7 +58,6 @@
       </label>
 
       <div class="actions">
-        <button id="startBtn" type="button" class="start">Begin</button>
         <button id="demoBtn" type="button" class="demo">Start demo</button>
         <button id="continueBtn" type="button" class="restore continue" hidden>Keep going</button>
         <button id="restoreBtn" type="button" class="restore" hidden>Restore last writing</button>
@@ -78,6 +77,14 @@
       </div>
     </section>
 
+    <!-- Its own top-level component (not nested in .controls) so the mobile
+         zoom layout can treat it as a first-class box: on LAND it dominates
+         the screen, elsewhere it shrinks back to an ordinary Stop/Begin
+         again control alongside whatever section is active. -->
+    <div id="beginBox" class="begin-box">
+      <button id="startBtn" type="button" class="start">Begin</button>
+    </div>
+
     <section class="stage" aria-label="Writing area">
       <div class="stage-meta">
         <span id="phase" class="phase">Ready when you are</span>
@@ -87,11 +94,17 @@
       <div class="editor-wrap">
         <textarea
           id="editor"
-          placeholder="Press Begin, then start typing here…"
+          placeholder="Press Start, then let the words come…"
           disabled
           spellcheck="true"
           autocomplete="off"
         ></textarea>
+        <div id="demoIntro" class="demo-intro" hidden>
+          <div class="demo-intro-body">
+            <p id="demoIntroText" class="demo-intro-text"></p>
+            <button id="demoIntroGo" type="button" class="start">Go</button>
+          </div>
+        </div>
         <div id="countdown" class="countdown" hidden><span id="countNum"></span></div>
       </div>
       <div class="stage-foot">
@@ -102,12 +115,11 @@
     </section>
 
     <footer class="colophon">
-      The timer runs in your browser. When a run ends, your writing is saved to this
-      browser — and backed up to your Val Town account if you're signed in. With
-      <strong>AI takeover</strong> on, the tail of your text is sent to a language model
-      so it can continue where you left off — turn the toggle off to keep everything
-      fully local.
-      Idea via <a href="https://dynomight.net/links-2/" target="_blank" rel="noopener">dynomight</a> (see #9).
+      Everything runs in your browser — your writing stays on this device, and
+      is backed up to your Val Town account if you're signed in. With
+      <strong>AI takeover</strong> on, the tail of your text is sent to a
+      language model so it can continue where you left off; switch it off to
+      keep everything fully local.
       <a class="source-link" href="https://www.val.town/x/cricks_unmixed4u/dangerous-writing-app/code/" target="_blank" rel="noopener">See source</a>
     </footer>
   </main>
@@ -119,6 +131,7 @@
     <div class="gracebar-track"><div id="graceFill" class="gracebar-fill"></div></div>
   </div>
 
+  <script src="/countdown-bar.js"></script>
   <script src="/client.js"></script>
 </body>
 </html>
