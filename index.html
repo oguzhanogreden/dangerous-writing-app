@@ -15,12 +15,13 @@
 <body>
   <main data-active="begin">
     <header class="masthead">
-      <div class="kicker">A quiet place to write</div>
+      <div class="kicker">Keep writing, or the words drift away.</div>
       <h1>Dangerous&nbsp;writing</h1>
       <p class="lede">
         Set a goal and a little patience for silence, then write — and keep
         writing. When you pause, the words begin to drift, a little at a time,
-        until you pick the pen back up. Go at your own pace.
+        until you pick the pen back up. You choose how much silence you can
+        afford.
       </p>
     </header>
 
@@ -45,7 +46,7 @@
           <output id="secondsOut" class="readout">5<span class="unit">sec</span></output>
         </div>
         <input id="seconds" type="range" min="1" max="20" step="1" value="5" />
-        <div class="hint">Seconds of silence allowed before the decay begins.</div>
+        <div class="hint">Seconds of silence before the words start to drift.</div>
       </div>
 
       <label class="toggle" for="aiMode">
@@ -53,7 +54,7 @@
         <span class="toggle-track"><span class="toggle-knob"></span></span>
         <span class="toggle-text">
           <span class="toggle-title">AI takeover</span>
-          <span class="toggle-sub">When you stop, the machine writes for you instead of erasing.</span>
+          <span class="toggle-sub">When you stop, the machine writes on for you instead of letting the words drift.</span>
         </span>
       </label>
 
@@ -94,7 +95,7 @@
       <div class="editor-wrap">
         <textarea
           id="editor"
-          placeholder="Press Start, then let the words come…"
+          placeholder="Press Begin, then let the words come…"
           disabled
           spellcheck="true"
           autocomplete="off"
