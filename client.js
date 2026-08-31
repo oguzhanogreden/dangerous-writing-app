@@ -314,11 +314,38 @@ const introCountdown = createCountdownBar({
   formatLabel: (left) => "Demo starting in " + (left / 1000).toFixed(1) + "s — or tap Go",
 });
 
-// "Keep going" is only worth offering when there is writing to carry forward —
-// not on an empty page, and not on untouched seed text (cancelled countdown).
-function syncContinueBtn() {
+// The single owner of what #beginBox offers. "Keep going" is only worth
+// offering when there is writing to carry forward — not on an empty page, and
+// not on untouched seed text (cancelled countdown) — and whenever it is
+// offered it takes the primary slot, demoting the seed-starting button. That
+// demotion matters beyond emphasis: start() overwrites the editor with the
+// seed, so a button labelled "Begin again" next to surviving text promises
+// continuity and delivers a wipe.
+//
+// Every startBtn.textContent assignment belongs here. Setting it anywhere else
+// reintroduces the scattered state this replaced.
+//
+// `active` is a parameter because start() calls this before it flips
+// `counting`/`running` — the demo path sets `counting` several statements
+// later, and runCountdown() sets it later still.
+function syncPrimaryAction(active = running || counting) {
+  if (active) {
+    // Mid-run there is one action: stop. Clearing .secondary is not optional —
+    // without it a Stop entered from the DONE state renders de-emphasised.
+    continueBtn.hidden = true;
+    startBtn.classList.remove("secondary");
+    startBtn.textContent = "Stop";
+    return;
+  }
   const text = editor.value;
-  continueBtn.hidden = !text.trim() || text === SEED_TEXT;
+  const carry = !!text.trim() && text !== SEED_TEXT;
+  continueBtn.hidden = !carry;
+  startBtn.classList.toggle("secondary", carry);
+  startBtn.textContent = carry
+    ? "Start a new piece" // says plainly that the text on screen is going away
+    : Task.stage === "LAND"
+    ? "Begin"
+    : "Begin again";
 }
 
 function cancelCountdown() {
@@ -639,12 +666,12 @@ function start(opts = {}) {
   editor.style.setProperty("--fade", "0");
   editor.disabled = true;
   copyBtn.hidden = true;
-  continueBtn.hidden = true;
   collapseEntries();
   updateCounter();
 
-  // Begin doubles as a Stop control once a run/countdown is active.
-  startBtn.textContent = "Stop";
+  // Begin doubles as a Stop control once a run/countdown is active. Forced,
+  // because neither `counting` nor `running` is set yet at this point.
+  syncPrimaryAction(true);
   demoBtn.disabled = true;
   minutes.disabled = true;
   seconds.disabled = true;
@@ -710,8 +737,7 @@ function stop() {
     );
   }
 
-  startBtn.textContent = "Begin again";
-  syncContinueBtn();
+  syncPrimaryAction();
   demoBtn.disabled = false;
   minutes.disabled = false;
   seconds.disabled = false;
@@ -834,8 +860,7 @@ function finish(won) {
   }
 
   startBtn.disabled = false;
-  startBtn.textContent = "Begin again";
-  syncContinueBtn(); // offer to carry the surviving text into a fresh run
+  syncPrimaryAction(); // offer to carry the surviving text into a fresh run
   minutes.disabled = false;
   seconds.disabled = false;
   aiMode.disabled = false;
@@ -1036,7 +1061,7 @@ function restoreTextToEditor(text) {
   setPhase("Restored");
   setStatus("Your last writing is back on the page.", "win");
   copyBtn.hidden = false;
-  continueBtn.hidden = false; // a restored entry can be picked back up too
+  syncPrimaryAction(); // a restored entry can be picked back up too
   autosize();
   updateCounter();
   scrollTo(0, document.body.scrollHeight);
@@ -1092,3 +1117,5 @@ entriesBtn.addEventListener("click", () => {
 // STAGE_LAYOUT: LAND shows the big Begin button, DONE shows whatever was
 // last written.
 setStage(Task.stage);
+// The markup ships the LAND labels; a restored DONE stage needs "Begin again".
+syncPrimaryAction();

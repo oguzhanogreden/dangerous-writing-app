@@ -222,10 +222,16 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
    panel. On LAND — the writer's one job — it's the loud, oversized call to
    action; in every other stage it's a normal-sized Stop / Begin again
    control that stays reachable. */
+/* Holds one button most of the time, two when there is writing to carry
+   forward: "Keep going" leading, the seed-starting button beside it. */
 .begin-box {
   width: 100%;
   max-width: 46rem;
   margin: 0 auto 2.75rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .start {
@@ -244,10 +250,26 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
 .start:active { transform: translateY(1px); }
 .start:disabled { opacity: 0.35; cursor: not-allowed; }
 
+/* Demoted while "Keep going" holds the primary slot: same size and shape,
+   outline instead of fill, so the two read as one choice with a default
+   rather than as two competing offers. */
+.start.secondary {
+  background: transparent;
+  color: var(--ink);
+}
+.start.secondary:hover { background: var(--ink); color: var(--paper); opacity: 1; }
+
+/* Match .start's proportions — the primary must not render narrower than the
+   secondary standing next to it, which .restore's tighter padding would do. */
+.begin-box .continue {
+  padding: 0.8rem 2.1rem;
+}
+
 /* Large whenever "begin" is the active section — which, per STAGE_LAYOUT in
    client.js, only ever happens on LAND. Landing is the one moment this
    button is the entire point of the page. */
-main[data-active="begin"] .start {
+main[data-active="begin"] .start,
+main[data-active="begin"] .begin-box .continue {
   font-size: 1.35rem;
   padding: 1.15rem 3rem;
 }
@@ -770,11 +792,13 @@ body.focus-mode .status {
   main[data-active="begin"] .begin-box {
     flex: 1 1 auto;
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
     min-height: 60vh;
   }
-  main[data-active="begin"] .start {
+  main[data-active="begin"] .start,
+  main[data-active="begin"] .begin-box .continue {
     width: 100%;
     max-width: 22rem;
     font-size: 1.6rem;
@@ -835,5 +859,12 @@ body.focus-mode .status {
   .start { width: 100%; }
   .demo,
   .restore { flex: 1 1 auto; }
+  /* Stack rather than wrap: .start is width:100% here, so a row would leave
+     "Keep going" alone on the line above at an unrelated width. */
+  .begin-box {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .begin-box .continue { padding: 0.8rem 1.5rem; }
   .gracebar-label { padding-right: 1.5rem; }
 }

@@ -60,7 +60,6 @@
 
       <div class="actions">
         <button id="demoBtn" type="button" class="demo">Start demo</button>
-        <button id="continueBtn" type="button" class="restore continue" hidden>Keep going</button>
         <button id="restoreBtn" type="button" class="restore" hidden>Restore last writing</button>
         <button
           id="entriesBtn"
@@ -83,6 +82,10 @@
          the screen, elsewhere it shrinks back to an ordinary Stop/Begin
          again control alongside whatever section is active. -->
     <div id="beginBox" class="begin-box">
+      <!-- "Keep going" leads whenever there is writing to carry forward, which
+           is why it lives here rather than among the secondary .actions: in
+           this box prominence comes from page flow, not from styling. -->
+      <button id="continueBtn" type="button" class="restore continue" hidden>Keep going</button>
       <button id="startBtn" type="button" class="start">Begin</button>
     </div>
 
