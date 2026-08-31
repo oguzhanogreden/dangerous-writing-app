@@ -56,6 +56,7 @@ main {
 .masthead,
 .controls,
 .colophon {
+  width: 100%;
   max-width: 46rem;
   margin-inline: auto;
 }
@@ -67,6 +68,7 @@ main {
    Below ~1300px the viewport binds first and the clamp shrinks the type in
    step, so the measure holds rather than collapsing. */
 .stage {
+  width: 100%;
   max-width: 76rem;
   margin-inline: auto;
 }
@@ -221,6 +223,7 @@ input[type="range"]:disabled::-webkit-slider-thumb { border-color: var(--muted);
    action; in every other stage it's a normal-sized Stop / Begin again
    control that stays reachable. */
 .begin-box {
+  width: 100%;
   max-width: 46rem;
   margin: 0 auto 2.75rem;
 }
@@ -740,8 +743,7 @@ body.focus-mode .status {
     display: flex;
     flex-direction: column;
     gap: 0;
-    padding-top: 1.5rem;
-    padding-bottom: 7rem;
+    padding: 1.5rem 0 7rem;
     min-height: 100vh;
   }
 
