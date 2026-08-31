@@ -4,6 +4,7 @@ import {
   getOAuthUserData,
   oauthMiddleware,
 } from "https://esm.town/v/std/oauth/middleware.ts";
+import { foldsIntoPiece } from "./piece-heuristic.ts";
 
 // GreenPT is OpenAI-compatible: POST /v1/chat/completions with a Bearer key.
 const GREENPT_BASE_URL = "https://api.greenpt.ai/v1";
@@ -11,6 +12,9 @@ const GREENPT_MODEL = "gemma4"; // GreenPT's recommended default chat model
 
 // Finished writing sessions. Only saved when the visitor is signed in to
 // val.town (the browser always keeps its own copy in localStorage first).
+// Legacy: superseded by pieces_2/writing_versions_2 below and read only by the
+// one-shot migration, but still created so that migration has a table to read
+// on a fresh database.
 await sqlite.execute(`CREATE TABLE IF NOT EXISTS writing_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   user_id TEXT NOT NULL,
@@ -22,6 +26,246 @@ await sqlite.execute(
   `CREATE INDEX IF NOT EXISTS idx_writing_sessions_user
    ON writing_sessions (user_id, saved_at DESC)`,
 );
+
+// ---- pieces and versions ----
+// A *piece* is one thing you are writing; a *version* is one saved run of it.
+// writing_sessions conflated the two: a continuation overwrote the row it
+// continued, so a piece worked on across five sittings left one row and no
+// history, while anything that failed the prefix check became an unrelated
+// entry. Splitting them lets the panel show "this piece, five versions"
+// instead of five things that look unrelated.
+// New tables rather than ALTER, per AGENTS.md.
+const PIECES = "pieces_2";
+const VERSIONS = "writing_versions_2";
+const MIGRATIONS = "schema_migrations_2";
+
+await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${PIECES} (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id TEXT NOT NULL,
+  username TEXT,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+)`);
+// legacy_session_id is UNIQUE so a re-run of the migration can only ever be a
+// no-op: duplicate version rows are impossible by construction, not just by
+// the marker check in migrateLegacySessions().
+await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${VERSIONS} (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  piece_id INTEGER NOT NULL,
+  user_id TEXT NOT NULL,
+  text TEXT NOT NULL,
+  saved_at INTEGER NOT NULL,
+  legacy_session_id INTEGER UNIQUE
+)`);
+await sqlite.execute(
+  `CREATE INDEX IF NOT EXISTS idx_pieces_2_user ON ${PIECES} (user_id, updated_at DESC)`,
+);
+await sqlite.execute(
+  `CREATE INDEX IF NOT EXISTS idx_writing_versions_2_piece
+   ON ${VERSIONS} (piece_id, saved_at DESC)`,
+);
+await sqlite.execute(`CREATE TABLE IF NOT EXISTS ${MIGRATIONS} (
+  name TEXT PRIMARY KEY,
+  applied_at INTEGER NOT NULL
+)`);
+
+type PieceRow = { id: number; created_at: number; updated_at: number };
+type VersionRow = { id: number; text: string; saved_at: number };
+
+async function insertPiece(
+  userId: string,
+  username: string | null,
+  createdAt: number,
+): Promise<number> {
+  const res = await sqlite.execute({
+    sql:
+      `INSERT INTO ${PIECES} (user_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)`,
+    args: [userId, username, createdAt, createdAt],
+  });
+  return Number(res.lastInsertRowid);
+}
+
+// The newest version of a piece — the thing a new save is compared against.
+async function latestVersion(pieceId: number): Promise<VersionRow | undefined> {
+  const res = await sqlite.execute({
+    sql:
+      `SELECT id, text, saved_at FROM ${VERSIONS} WHERE piece_id = ? ORDER BY saved_at DESC LIMIT 1`,
+    args: [pieceId],
+  });
+  return res.rows[0] as unknown as VersionRow | undefined;
+}
+
+/**
+ * Fold the flat writing_sessions history into pieces and versions, once ever.
+ *
+ * Top-level awaits run on every cold start and cold starts can overlap, so the
+ * marker is claimed with INSERT OR IGNORE and the work only proceeds if this
+ * process is the one that wrote the row. A loser sees rowsAffected 0 and
+ * returns without touching anything.
+ */
+async function migrateLegacySessions(): Promise<void> {
+  const NAME = "writing_sessions->pieces_2";
+  const claim = await sqlite.execute({
+    sql: `INSERT OR IGNORE INTO ${MIGRATIONS} (name, applied_at) VALUES (?, ?)`,
+    args: [NAME, Date.now()],
+  });
+  if (!claim.rowsAffected) return; // already applied, or another start won
+
+  try {
+    const res = await sqlite.execute(
+      `SELECT id, user_id, username, text, saved_at FROM writing_sessions
+       ORDER BY user_id, saved_at ASC`,
+    );
+    const rows = res.rows as unknown as Array<{
+      id: number;
+      user_id: string;
+      username: string | null;
+      text: string;
+      saved_at: number;
+    }>;
+
+    // Walk each user's history oldest-first, carrying the piece currently being
+    // extended; the same predicate the live save path uses decides the breaks.
+    let open: { id: number; userId: string; text: string; savedAt: number } | null = null;
+    for (const row of rows) {
+      const continues = open !== null &&
+        open.userId === row.user_id &&
+        foldsIntoPiece(open.text, row.text, open.savedAt, row.saved_at);
+
+      const pieceId = continues
+        ? open!.id
+        : await insertPiece(row.user_id, row.username, row.saved_at);
+
+      await sqlite.execute({
+        sql: `INSERT OR IGNORE INTO ${VERSIONS}
+              (piece_id, user_id, text, saved_at, legacy_session_id)
+              VALUES (?, ?, ?, ?, ?)`,
+        args: [pieceId, row.user_id, row.text, row.saved_at, row.id],
+      });
+      await sqlite.execute({
+        sql: `UPDATE ${PIECES} SET updated_at = ? WHERE id = ?`,
+        args: [row.saved_at, pieceId],
+      });
+
+      open = { id: pieceId, userId: row.user_id, text: row.text, savedAt: row.saved_at };
+    }
+  } catch (err) {
+    // Release the claim so the next cold start retries rather than leaving the
+    // history half-folded forever. Re-running is safe: legacy_session_id is
+    // UNIQUE, so versions already written are skipped, and any piece left
+    // without versions is filtered out by loadPieces().
+    await sqlite.execute({
+      sql: `DELETE FROM ${MIGRATIONS} WHERE name = ?`,
+      args: [NAME],
+    });
+    console.error("writing_sessions migration failed, will retry:", err);
+  }
+}
+
+// Swallowed rather than awaited-and-thrown: a migration failure should not
+// stop the val from serving the writing app.
+await migrateLegacySessions();
+
+/**
+ * Store `text` as a new version, on the piece it continues or on a fresh one.
+ *
+ * `pieceIdHint` only chooses which piece to compare against (the client may
+ * know which one the writer picked up); foldsIntoPiece still decides, so a
+ * stale hint cannot merge unrelated writing into someone's piece.
+ */
+async function saveVersion(
+  userId: string,
+  username: string | null,
+  text: string,
+  pieceIdHint: number | null,
+): Promise<number> {
+  const now = Date.now();
+
+  let candidate: PieceRow | undefined;
+  if (pieceIdHint) {
+    const res = await sqlite.execute({
+      sql:
+        `SELECT id, created_at, updated_at FROM ${PIECES} WHERE id = ? AND user_id = ?`,
+      args: [pieceIdHint, userId],
+    });
+    candidate = res.rows[0] as unknown as PieceRow | undefined;
+  } else {
+    const res = await sqlite.execute({
+      sql:
+        `SELECT id, created_at, updated_at FROM ${PIECES} WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1`,
+      args: [userId],
+    });
+    candidate = res.rows[0] as unknown as PieceRow | undefined;
+  }
+
+  let pieceId: number | null = null;
+  if (candidate) {
+    const prev = await latestVersion(candidate.id);
+    if (prev && foldsIntoPiece(prev.text, text, prev.saved_at, now)) {
+      pieceId = candidate.id;
+    }
+  }
+  if (pieceId === null) pieceId = await insertPiece(userId, username, now);
+
+  await sqlite.execute({
+    sql:
+      `INSERT INTO ${VERSIONS} (piece_id, user_id, text, saved_at) VALUES (?, ?, ?, ?)`,
+    args: [pieceId, userId, text, now],
+  });
+  await sqlite.execute({
+    sql: `UPDATE ${PIECES} SET updated_at = ? WHERE id = ?`,
+    args: [now, pieceId],
+  });
+  return pieceId;
+}
+
+// First non-empty line, trimmed to something that fits one row of the panel.
+function pieceTitle(text: string): string {
+  const line = text.split("\n").map((l) => l.trim()).find((l) => l.length > 0) ?? "";
+  return line.length > 60 ? line.slice(0, 59).trimEnd() + "…" : line;
+}
+
+const MAX_PIECES = 20;
+const MAX_VERSIONS_PER_PIECE = 3;
+
+async function loadPieces(userId: string) {
+  const res = await sqlite.execute({
+    sql:
+      `SELECT id, created_at, updated_at FROM ${PIECES} WHERE user_id = ? ORDER BY updated_at DESC LIMIT ?`,
+    args: [userId, MAX_PIECES],
+  });
+  const pieces = res.rows as unknown as PieceRow[];
+
+  // At most 21 queries; a window function would be one, but the panel is not
+  // hot and this stays readable.
+  const out: Array<{
+    id: number;
+    title: string;
+    updatedAt: number;
+    versions: Array<{ id: number; pieceId: number; text: string; savedAt: number }>;
+  }> = [];
+  for (const p of pieces) {
+    const vres = await sqlite.execute({
+      sql:
+        `SELECT id, text, saved_at FROM ${VERSIONS} WHERE piece_id = ? ORDER BY saved_at DESC LIMIT ?`,
+      args: [p.id, MAX_VERSIONS_PER_PIECE],
+    });
+    const versions = vres.rows as unknown as VersionRow[];
+    if (!versions.length) continue; // a piece with no versions has nothing to show
+    out.push({
+      id: p.id,
+      title: pieceTitle(versions[0].text),
+      updatedAt: p.updated_at,
+      versions: versions.map((v) => ({
+        id: v.id,
+        pieceId: p.id,
+        text: v.text,
+        savedAt: v.saved_at,
+      })),
+    });
+  }
+  return out;
+}
 
 // Ask GreenPT to continue the writer's text in their voice, briefly.
 async function continueText(text: string): Promise<string> {
@@ -238,31 +482,25 @@ async function handler(req: Request): Promise<Response> {
       return Response.json({ saved: false, reason: "not signed in" });
     }
     try {
-      const { text } = await req.json();
+      const { text, pieceId } = await req.json();
       if (typeof text !== "string" || !text.trim()) {
         return Response.json({ saved: false, reason: "no text" });
       }
-      // "Keep going" re-saves the same piece as a growing superset on every
-      // run. If the new text starts with the latest saved row, it is a
-      // continuation of that session, so fold it into that row instead of
-      // stacking near-identical snapshots in the Previous entries panel.
-      const latest = await sqlite.execute({
-        sql: "SELECT id, text FROM writing_sessions WHERE user_id = ? ORDER BY saved_at DESC LIMIT 1",
-        args: [user.user.id],
+      // Every save is kept as its own version now. Continuations no longer
+      // overwrite the row they continue — they join it as a later version of
+      // the same piece — so a piece written across several sittings keeps its
+      // history instead of collapsing to a single snapshot.
+      const savedPieceId = await saveVersion(
+        user.user.id,
+        user.user.username ?? null,
+        text,
+        typeof pieceId === "number" ? pieceId : null,
+      );
+      return Response.json({
+        saved: true,
+        pieceId: savedPieceId,
+        user: user.user.username ?? user.user.id,
       });
-      const last = latest.rows[0] as unknown as { id: number; text: string } | undefined;
-      if (last && typeof last.text === "string" && text.startsWith(last.text)) {
-        await sqlite.execute({
-          sql: "UPDATE writing_sessions SET text = ?, saved_at = ? WHERE id = ?",
-          args: [text, Date.now(), last.id],
-        });
-      } else {
-        await sqlite.execute({
-          sql: "INSERT INTO writing_sessions (user_id, username, text, saved_at) VALUES (?, ?, ?, ?)",
-          args: [user.user.id, user.user.username ?? null, text, Date.now()],
-        });
-      }
-      return Response.json({ saved: true, user: user.user.username ?? user.user.id });
     } catch (err) {
       return Response.json({ saved: false, reason: String(err) }, { status: 500 });
     }
@@ -270,16 +508,8 @@ async function handler(req: Request): Promise<Response> {
 
   if (req.method === "GET" && url.pathname === "/api/sessions") {
     const user = await getOAuthUserData(req);
-    if (!user?.user?.id) return Response.json({ saved: false, sessions: [] });
-    const res = await sqlite.execute({
-      sql: "SELECT id, text, saved_at FROM writing_sessions WHERE user_id = ? ORDER BY saved_at DESC LIMIT 5",
-      args: [user.user.id],
-    });
-    const rows = res.rows as Array<{ id: number; text: string; saved_at: number }>;
-    return Response.json({
-      saved: true,
-      sessions: rows.map((r) => ({ id: r.id, text: r.text, savedAt: r.saved_at })),
-    });
+    if (!user?.user?.id) return Response.json({ saved: false, pieces: [] });
+    return Response.json({ saved: true, pieces: await loadPieces(user.user.id) });
   }
 
   if (req.method === "POST" && url.pathname === "/ai/continue") {
@@ -334,24 +564,31 @@ async function handler(req: Request): Promise<Response> {
 async function getDebugServerState(req: Request) {
   const user = await getOAuthUserData(req);
   const signedIn = !!user?.user?.id;
-  let sessionCount = 0;
+  // Pieces and versions are different numbers now, and which one is "wrong"
+  // depends on what you are debugging, so report both rather than picking.
+  let pieceCount = 0;
+  let versionCount = 0;
   let latestSavedAt: number | null = null;
   if (signedIn) {
     const res = await sqlite.execute({
-      sql:
-        "SELECT COUNT(*) as count, MAX(saved_at) as latest FROM writing_sessions WHERE user_id = ?",
-      args: [user!.user.id],
+      sql: `SELECT
+              (SELECT COUNT(*) FROM ${PIECES} WHERE user_id = ?) AS pieces,
+              (SELECT COUNT(*) FROM ${VERSIONS} WHERE user_id = ?) AS versions,
+              (SELECT MAX(saved_at) FROM ${VERSIONS} WHERE user_id = ?) AS latest`,
+      args: [user!.user.id, user!.user.id, user!.user.id],
     });
     const row = res.rows[0] as unknown as
-      | { count: number; latest: number | null }
+      | { pieces: number; versions: number; latest: number | null }
       | undefined;
-    sessionCount = row?.count ?? 0;
+    pieceCount = row?.pieces ?? 0;
+    versionCount = row?.versions ?? 0;
     latestSavedAt = row?.latest ?? null;
   }
   return {
     signedIn,
     username: user?.user?.username ?? null,
-    sessionCount,
+    pieceCount,
+    versionCount,
     latestSavedAt: latestSavedAt ? new Date(latestSavedAt).toISOString() : null,
     greenptConfigured: !!Deno.env.get("GREENPT_API_KEY"),
     serverTime: new Date().toISOString(),

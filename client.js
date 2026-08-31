@@ -536,17 +536,24 @@ entriesBtn.addEventListener("click", () => {
   else expandEntries();
 });
 
+// The panel renders pieces, but a click still restores one *version*, so the
+// versions are also kept flat — the click handler looks up by version id and
+// should not have to walk the grouping to find one.
+let previousPieces = [];
 let previousEntries = [];
 
 async function loadPreviousEntries() {
   try {
     const res = await fetch("/api/sessions");
     const data = await res.json();
-    if (data && data.saved && data.sessions && data.sessions.length) {
-      previousEntries = data.sessions;
-      renderEntries(previousEntries);
+    if (data && data.saved && data.pieces && data.pieces.length) {
+      previousPieces = data.pieces;
+      previousEntries = previousPieces.flatMap((p) => p.versions);
+      renderEntries(previousPieces);
       entriesBtn.hidden = false;
     } else {
+      previousPieces = [];
+      previousEntries = [];
       entriesBtn.hidden = true;
       collapseEntries();
     }
@@ -556,29 +563,53 @@ async function loadPreviousEntries() {
   }
 }
 
-function renderEntries(sessions) {
+// Versions of one piece sit together under its title; a horizontal rule marks
+// where one piece ends and the next begins — the "you changed subject here"
+// mark, which the flat list could not show at all.
+function renderEntries(pieces) {
   entriesList.innerHTML = "";
-  for (const s of sessions) {
-    const li = document.createElement("li");
-    li.className = "entries-item";
+  pieces.forEach((piece, i) => {
+    if (i > 0) {
+      const sep = document.createElement("li");
+      sep.className = "piece-rule";
+      sep.setAttribute("role", "separator");
+      entriesList.appendChild(sep);
+    }
 
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "entries-item-btn";
-    btn.dataset.id = String(s.id);
+    const group = document.createElement("li");
+    group.className = "piece";
 
-    const time = document.createElement("span");
-    time.className = "entries-item-time";
-    time.textContent = `${formatSessionTime(s.savedAt)} · ${countWords(s.text)} words`;
+    const heading = document.createElement("div");
+    heading.className = "piece-title";
+    heading.textContent = piece.title || "Untitled";
+    group.appendChild(heading);
 
-    const preview = document.createElement("span");
-    preview.className = "entries-item-preview";
-    preview.textContent = snippet(s.text);
+    const versions = document.createElement("ul");
+    versions.className = "piece-versions";
+    for (const v of piece.versions) {
+      const li = document.createElement("li");
+      li.className = "entries-item";
 
-    btn.append(time, preview);
-    li.appendChild(btn);
-    entriesList.appendChild(li);
-  }
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "entries-item-btn";
+      btn.dataset.id = String(v.id);
+
+      const time = document.createElement("span");
+      time.className = "entries-item-time";
+      time.textContent = `${formatSessionTime(v.savedAt)} · ${countWords(v.text)} words`;
+
+      const preview = document.createElement("span");
+      preview.className = "entries-item-preview";
+      preview.textContent = snippet(v.text);
+
+      btn.append(time, preview);
+      li.appendChild(btn);
+      versions.appendChild(li);
+    }
+    group.appendChild(versions);
+    entriesList.appendChild(group);
+  });
 }
 
 entriesList.addEventListener("click", (e) => {
