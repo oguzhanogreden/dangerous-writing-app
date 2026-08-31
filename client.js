@@ -44,13 +44,18 @@ const authBtn = document.getElementById("authBtn");
 
 /**
  * Leaf names nested inside "stage" — closed, kebab-case, joined onto their
- * parent with "/" (see Section below). Currently just "demo": it's
- * FIRST_DEMO's own identity in the layout system rather than an alias for
- * plain "stage", even though it drives identical CSS today via the `^=`
- * prefix rules in style.css. Add a member here (and a matching CSS rule)
- * the day a demo-specific layout is actually needed, without inventing a
- * second Record or a second setter alongside STAGE_LAYOUT/setStage.
- * @typedef {"demo"} StageSub
+ * parent with "/" (see Section below). Both members drive identical CSS
+ * today via the `^=` prefix rules in style.css; add a matching CSS rule
+ * the day either needs its own layout, without inventing a second Record
+ * or a second setter alongside STAGE_LAYOUT/setStage.
+ * - "demo" — FIRST_DEMO's own identity, set via setStage()/STAGE_LAYOUT
+ *   like any other Stage-driven Section.
+ * - "ai-takeover" — the machine has taken the pen during WRITE. Unlike
+ *   "demo" this doesn't correspond to a Stage of its own (Task.stage stays
+ *   "WRITE" throughout); it's set directly from loop() the same way the
+ *   LAND-stage interaction listeners below call setActiveSection() without
+ *   going through setStage().
+ * @typedef {"demo" | "ai-takeover"} StageSub
  */
 
 /**
@@ -919,6 +924,7 @@ function loop(now) {
       setBody("warning", false);
       setBody("decaying", false);
       setBody("aiwriting", true);
+      setActiveSection("stage/ai-takeover");
       editor.style.setProperty("--fade", "0");
       progress.style.background = "var(--ai)";
       setPhase("Passing the pen");
@@ -956,6 +962,7 @@ function loop(now) {
     decayAcc = 0;
     setBody("decaying", false);
     setBody("aiwriting", false);
+    setActiveSection("stage");
     // Warning ramp begins WARN_MS before the deadline; fade grows 0 -> 1 across it.
     const WARN_MS = Math.min(1500, inactivityMs * 0.6);
     const warnStart = inactivityMs - WARN_MS;
